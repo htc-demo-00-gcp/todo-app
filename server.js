@@ -8,8 +8,24 @@ const PORT = process.env.PORT || 3000;
 
 // GCS Setup
 const bucketName = process.env.BUCKET_NAME;
-const storage = bucketName ? new Storage() : null;
-const bucket = storage ? storage.bucket(bucketName) : null;
+console.log('Environment variables:');
+console.log('- BUCKET_NAME:', bucketName || 'NOT SET');
+console.log('- NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
+
+let storage = null;
+let bucket = null;
+
+if (bucketName) {
+  try {
+    storage = new Storage();
+    bucket = storage.bucket(bucketName);
+    console.log('GCS Storage initialized successfully for bucket:', bucketName);
+  } catch (error) {
+    console.error('Failed to initialize GCS Storage:', error);
+  }
+} else {
+  console.log('BUCKET_NAME not configured, photo uploads will be disabled');
+}
 
 // Multer setup for memory storage
 const upload = multer({ 
@@ -56,7 +72,12 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    todos: todos.length
+    todos: todos.length,
+    environment: {
+      bucketName: bucketName || 'NOT SET',
+      bucketConfigured: !!bucket,
+      nodeEnv: process.env.NODE_ENV || 'NOT SET'
+    }
   });
 });
 
