@@ -20,9 +20,13 @@ spec:
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy}}
         env:
-        - name: REACT_APP_BUCKET_NAME
+        - name: BUCKET_NAME
           value: {{ .Values.bucket.name }}
-        - name: REACT_APP_QUEUE_NAME
+        - name: QUEUE_NAME
           value: {{ .Values.queue.name }}
+        - name: SERVICE_ACCOUNT
+          value: {{ .Values.account.serviceAccountName }}
+        - name: NAMESPACE
+          value: {{ .Values.namespace.namespace }}
         ports:
         - containerPort: 3000
