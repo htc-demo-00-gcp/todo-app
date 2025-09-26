@@ -122,10 +122,19 @@
         
         <div class="card">
             <h2>✨ Add New Todo</h2>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <input type="text" id="new-todo-input" placeholder="Enter a new todo..." style="flex: 1;">
-                <button onclick="addTodo()">➕ Add</button>
-            </div>
+            <form id="todo-form" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 15px;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="new-todo-input" placeholder="Enter a new todo..." style="flex: 1;" required>
+                    <button type="submit">➕ Add</button>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <label for="photo-input" style="color: white; font-size: 16px;">📷 Photo (optional JPEG):</label>
+                    <input type="file" id="photo-input" accept="image/jpeg" style="flex: 1;">
+                </div>
+                <div id="photo-preview" style="display: none;">
+                    <img id="preview-image" style="max-width: 200px; max-height: 150px; border-radius: 8px; margin-top: 10px;">
+                </div>
+            </form>
         </div>
         
         <div class="card">
@@ -180,9 +189,12 @@
             }
         }
         
-        async function addTodo() {
-            const input = document.getElementById('new-todo-input');
-            const text = input.value.trim();
+        async function addTodo(event) {
+            if (event) event.preventDefault();
+            
+            const textInput = document.getElementById('new-todo-input');
+            const photoInput = document.getElementById('photo-input');
+            const text = textInput.value.trim();
             
             if (!text) {
                 alert('Please enter a todo!');
@@ -190,25 +202,63 @@
             }
             
             try {
+                const formData = new FormData();
+                formData.append('text', text);
+                
+                if (photoInput.files[0]) {
+                    formData.append('photo', photoInput.files[0]);
+                }
+                
                 const response = await fetch('/api/todos', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ text })
+                    body: formData
                 });
                 
                 if (response.ok) {
-                    input.value = '';
+                    textInput.value = '';
+                    photoInput.value = '';
+                    document.getElementById('photo-preview').style.display = 'none';
                     loadTodos();
                 } else {
-                    alert('Failed to add todo');
+                    const error = await response.json();
+                    alert('Failed to add todo: ' + (error.error || 'Unknown error'));
                 }
             } catch (error) {
                 console.error('Failed to add todo:', error);
                 alert('Failed to add todo');
             }
         }
+        
+        // Photo preview functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const photoInput = document.getElementById('photo-input');
+            const preview = document.getElementById('photo-preview');
+            const previewImage = document.getElementById('preview-image');
+            const todoForm = document.getElementById('todo-form');
+            
+            photoInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    if (file.type !== 'image/jpeg') {
+                        alert('Please select a JPEG image file.');
+                        photoInput.value = '';
+                        preview.style.display = 'none';
+                        return;
+                    }
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        previewImage.src = e.target.result;
+                        preview.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    preview.style.display = 'none';
+                }
+            });
+            
+            todoForm.addEventListener('submit', addTodo);
+        });
         
         async function toggleTodo(id, completed) {
             try {
@@ -246,7 +296,7 @@
             }
         }
         
-        function renderTodos() {
+        async function renderTodos() {
             const container = document.getElementById('todos-container');
             
             if (todos.length === 0) {
@@ -254,20 +304,137 @@
                 return;
             }
             
-            container.innerHTML = todos.map(todo => `
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 15px; margin: 10px 0; background: rgba(255,255,255,0.1); border-radius: 10px; ${todo.completed ? 'opacity: 0.6;' : ''}">
-                    <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
-                        <input type="checkbox" ${todo.completed ? 'checked' : ''} 
-                               onchange="toggleTodo(${todo.id}, this.checked)"
-                               style="width: 20px; height: 20px; cursor: pointer;">
-                        <span style="font-size: 18px; ${todo.completed ? 'text-decoration: line-through;' : ''}">${todo.text}</span>
+            const todoElements = await Promise.all(todos.map(async (todo) => {
+                let photoHtml = '';
+                
+                if (todo.hasPhoto) {
+                    try {
+                        const photoResponse = await fetch(`/api/todos/${todo.id}/photo`);
+                        if (photoResponse.ok) {
+                            const { photoUrl } = await photoResponse.json();
+                            photoHtml = `
+                                <div style="margin-left: 35px; margin-top: 10px;">
+                                    <img src="${photoUrl}" 
+                                         style="max-width: 150px; max-height: 100px; border-radius: 8px; cursor: pointer;"
+                                         onclick="showFullPhoto('${photoUrl}', '${todo.text.replace(/'/g, "\\'")}')">
+                                    <button onclick="deletePhoto(${todo.id})" 
+                                            style="background: #ff6b6b; padding: 4px 8px; font-size: 12px; margin-left: 10px;">
+                                        🗑️ Remove Photo
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load photo for todo', todo.id, error);
+                    }
+                }
+                
+                return `
+                    <div style="padding: 15px; margin: 10px 0; background: rgba(255,255,255,0.1); border-radius: 10px; ${todo.completed ? 'opacity: 0.6;' : ''}">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
+                                <input type="checkbox" ${todo.completed ? 'checked' : ''} 
+                                       onchange="toggleTodo(${todo.id}, this.checked)"
+                                       style="width: 20px; height: 20px; cursor: pointer;">
+                                <span style="font-size: 18px; ${todo.completed ? 'text-decoration: line-through;' : ''}">${todo.text}</span>
+                                ${todo.hasPhoto ? '<span style="margin-left: 10px;">📷</span>' : ''}
+                            </div>
+                            <div style="display: flex; gap: 10px;">
+                                ${!todo.hasPhoto ? `<button onclick="addPhotoToTodo(${todo.id})" style="background: #4ecdc4; padding: 8px 12px; font-size: 14px;">📷 Add Photo</button>` : ''}
+                                <button onclick="deleteTodo(${todo.id})" 
+                                        style="background: #ff4757; padding: 8px 12px; font-size: 14px;">
+                                    🗑️ Delete
+                                </button>
+                            </div>
+                        </div>
+                        ${photoHtml}
                     </div>
-                    <button onclick="deleteTodo(${todo.id})" 
-                            style="background: #ff4757; padding: 8px 12px; font-size: 14px;">
-                        🗑️ Delete
-                    </button>
+                `;
+            }));
+            
+            container.innerHTML = todoElements.join('');
+        }
+        
+        // Show full size photo in a modal
+        function showFullPhoto(photoUrl, todoText) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.9); display: flex; align-items: center;
+                justify-content: center; z-index: 1000; cursor: pointer;
+            `;
+            
+            modal.innerHTML = `
+                <div style="text-align: center; color: white;">
+                    <h3 style="margin-bottom: 20px;">${todoText}</h3>
+                    <img src="${photoUrl}" style="max-width: 90vw; max-height: 80vh; border-radius: 10px;">
+                    <p style="margin-top: 20px; opacity: 0.7;">Click anywhere to close</p>
                 </div>
-            `).join('');
+            `;
+            
+            modal.onclick = () => document.body.removeChild(modal);
+            document.body.appendChild(modal);
+        }
+        
+        // Add photo to existing todo
+        function addPhotoToTodo(todoId) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/jpeg';
+            
+            input.onchange = async function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                if (file.type !== 'image/jpeg') {
+                    alert('Please select a JPEG image file.');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('photo', file);
+                
+                try {
+                    const response = await fetch(`/api/todos/${todoId}/photo`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (response.ok) {
+                        loadTodos();
+                    } else {
+                        const error = await response.json();
+                        alert('Failed to add photo: ' + (error.error || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Failed to add photo:', error);
+                    alert('Failed to add photo');
+                }
+            };
+            
+            input.click();
+        }
+        
+        // Delete photo from todo
+        async function deletePhoto(todoId) {
+            if (!confirm('Are you sure you want to remove this photo?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/todos/${todoId}/photo`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    loadTodos();
+                } else {
+                    alert('Failed to delete photo');
+                }
+            } catch (error) {
+                console.error('Failed to delete photo:', error);
+                alert('Failed to delete photo');
+            }
         }
         
         function updateStats() {
@@ -282,15 +449,7 @@
             document.getElementById('progress-percent').textContent = `${progress}%`;
         }
         
-        // Add enter key support for adding todos
-        document.addEventListener('DOMContentLoaded', function() {
-            const input = document.getElementById('new-todo-input');
-            input.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    addTodo();
-                }
-            });
-        });
+        // Add enter key support for adding todos (handled by form submit)
     </script>
 </body>
 </html>
