@@ -17,3 +17,9 @@ queue:
   name: unset
 
 serviceAccount: unset
+
+# Additional values that may be injected by Humanitec
+account:
+  serviceAccountName: unset
+namespace:
+  namespace: unset

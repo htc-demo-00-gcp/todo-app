@@ -21,12 +21,16 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy}}
         env:
         - name: BUCKET_NAME
-          value: {{ .Values.bucket.name }}
+          value: {{ .Values.bucket.name | quote }}
         - name: QUEUE_NAME
-          value: {{ .Values.queue.name }}
+          value: {{ .Values.queue.name | quote }}
+        {{- if .Values.account }}
         - name: SERVICE_ACCOUNT
-          value: {{ .Values.account.serviceAccountName }}
+          value: {{ .Values.account.serviceAccountName | quote }}
+        {{- end }}
+        {{- if .Values.namespace }}
         - name: NAMESPACE
-          value: {{ .Values.namespace.namespace }}
+          value: {{ .Values.namespace.namespace | quote }}
+        {{- end }}
         ports:
         - containerPort: 3000
