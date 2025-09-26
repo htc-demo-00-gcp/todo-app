@@ -35,6 +35,18 @@ let nextId = 3;
 app.use(express.static('public'));
 app.use(express.json());
 
+// Error handling middleware for multer
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    console.error('Multer error:', error);
+    return res.status(400).json({ error: error.message });
+  } else if (error) {
+    console.error('General error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+  next();
+});
+
 // Routes
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -91,6 +103,10 @@ async function getSignedUrl(filename) {
 }
 
 app.post('/api/todos', upload.single('photo'), async (req, res) => {
+  console.log('POST /api/todos - Body:', req.body);
+  console.log('POST /api/todos - File:', req.file ? 'Present' : 'Not present');
+  console.log('POST /api/todos - Bucket configured:', !!bucket);
+  
   const { text } = req.body;
   if (!text || text.trim() === '') {
     return res.status(400).json({ error: 'Todo text is required' });
@@ -106,17 +122,24 @@ app.post('/api/todos', upload.single('photo'), async (req, res) => {
   
   // Handle photo upload if present
   if (req.file && bucket) {
+    console.log('Attempting to upload photo for todo', newTodo.id);
     try {
       const filename = await uploadPhotoToGCS(req.file.buffer, newTodo.id);
+      console.log('Photo uploaded successfully:', filename);
       newTodo.hasPhoto = true;
       newTodo.photoFilename = filename;
     } catch (error) {
       console.error('Photo upload failed:', error);
       // Continue without photo
     }
+  } else if (req.file && !bucket) {
+    console.log('Photo uploaded but bucket not configured');
+  } else {
+    console.log('No photo in request or bucket not configured');
   }
   
   todos.push(newTodo);
+  console.log('Todo created:', newTodo);
   res.status(201).json(newTodo);
 });
 
